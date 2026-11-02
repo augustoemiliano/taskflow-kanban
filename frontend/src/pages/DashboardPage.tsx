@@ -1,5 +1,7 @@
 import { ListFilter, Plus, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
+import toast from "react-hot-toast";
+import { DemoBanner } from "../components/layout/DemoBanner";
 import { KanbanBoard } from "../components/kanban/KanbanBoard";
 import { TaskModal } from "../components/kanban/TaskModal";
 import { Button } from "../components/ui/Button";
@@ -9,8 +11,12 @@ import { Input } from "../components/ui/Input";
 import { Select } from "../components/ui/Select";
 import { PRIORITY_LABELS, STATUS_LABELS } from "../constants/task";
 import { useTasks } from "../hooks/useTasks";
+import { getDemoTaskApi, isDemoMode } from "../services/demo/demoMode";
 import { TASK_STATUSES, type Task, type TaskPriority } from "../types/task";
 import { countTasksByStatus } from "../utils/taskUtils";
+
+// Only available in the browser-only demo build (VITE_DEMO_MODE=true).
+const demoTaskApi = isDemoMode ? getDemoTaskApi() : null;
 
 type TaskModalState = { mode: "create" } | { mode: "edit"; task: Task } | null;
 
@@ -79,6 +85,16 @@ export const DashboardPage = () => {
     }
   };
 
+  const handleResetDemoData = async () => {
+    if (!demoTaskApi) {
+      return;
+    }
+
+    await demoTaskApi.reset();
+    loadTasks();
+    toast.success("Dados de exemplo restaurados.");
+  };
+
   const renderContent = () => {
     if (isLoading) {
       return <BoardSkeleton />;
@@ -138,6 +154,8 @@ export const DashboardPage = () => {
 
   return (
     <>
+      {demoTaskApi ? <DemoBanner onReset={handleResetDemoData} /> : null}
+
       <header className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">TaskFlow Kanban</h1>

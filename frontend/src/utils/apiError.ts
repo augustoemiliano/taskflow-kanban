@@ -1,5 +1,6 @@
 import axios from "axios";
 import type { ApiErrorResponse } from "../types/task";
+import { TaskApiError } from "./taskApiError";
 
 export const GENERIC_ERROR_MESSAGE = "Não foi possível concluir a ação. Tente novamente.";
 export const NETWORK_ERROR_MESSAGE =
@@ -10,6 +11,10 @@ export const NETWORK_ERROR_MESSAGE =
  * backend's `{ success: false, error: { message } }` contract.
  */
 export const getApiErrorMessage = (error: unknown): string => {
+  if (error instanceof TaskApiError) {
+    return error.message;
+  }
+
   if (axios.isAxiosError<ApiErrorResponse>(error)) {
     const apiMessage = error.response?.data?.error?.message;
 
