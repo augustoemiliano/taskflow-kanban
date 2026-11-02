@@ -1,0 +1,26 @@
+services:
+  backend:
+    build: ./backend
+    environment:
+      NODE_ENV: production
+      PORT: 3333
+      FRONTEND_URL: http://localhost:8080
+      DATABASE_DRIVER: sqlite
+      DATABASE_PATH: /app/data/taskflow.db
+    volumes:
+      - taskflow-data:/app/data
+    ports:
+      - "3333:3333"
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+volumes:
+  taskflow-data:
