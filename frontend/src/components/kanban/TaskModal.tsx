@@ -1,13 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState, type FormEvent } from "react";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
+import { Modal } from "../ui/Modal";
 import { Select } from "../ui/Select";
 import { Textarea } from "../ui/Textarea";
 import { PRIORITY_LABELS } from "../../constants/task";
 import type { CreateTaskPayload, Task, TaskPriority } from "../../types/task";
+import { validateTaskForm, type TaskFormErrors } from "../../utils/taskValidation";
 
 interface TaskModalProps {
-  isOpen: boolean;
   mode: "create" | "edit";
   task?: Task;
   onClose: () => void;
@@ -26,104 +27,88 @@ const getInitialFormData = (task?: Task): TaskFormData => ({
   priority: task?.priority ?? "MEDIUM"
 });
 
-export const TaskModal = ({ isOpen, mode, task, onClose, onSubmit }: TaskModalProps) => {
-  const [formData, setFormData] = useState<TaskFormData>(getInitialFormData(task));
-  const [formError, setFormError] = useState<string | null>(null);
+/**
+ * Render this component only while open (and with a `key` per task) so the form
+ * state is initialised from props on each opening, without syncing effects.
+ */
+export const TaskModal = ({ mode, task, onClose, onSubmit }: TaskModalProps) => {
+  const [formData, setFormData] = useState<TaskFormData>(() => getInitialFormData(task));
+  const [formErrors, setFormErrors] = useState<TaskFormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    setFormData(getInitialFormData(task));
-    setFormError(null);
-  }, [task, isOpen]);
-
-  const modalTitle = useMemo(() => (mode === "create" ? "Nova tarefa" : "Editar tarefa"), [mode]);
-
-  if (!isOpen) {
-    return null;
-  }
-
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const normalizedTitle = formData.title.trim();
-    const normalizedDescription = formData.description.trim();
+    const { payload, errors, isValid } = validateTaskForm(formData);
+    setFormErrors(errors);
 
-    if (normalizedTitle.length < 3 || normalizedTitle.length > 100) {
-      setFormError("O título deve ter entre 3 e 100 caracteres.");
+    if (!isValid) {
       return;
     }
 
-    if (normalizedDescription.length > 500) {
-      setFormError("A descrição deve ter no máximo 500 caracteres.");
-      return;
-    }
-
-    setFormError(null);
     setIsSubmitting(true);
 
     try {
-      await onSubmit({
-        title: normalizedTitle,
-        description: normalizedDescription,
-        priority: formData.priority
-      });
+      await onSubmit(payload);
       onClose();
-    } finally {
+    } catch {
+      // The API error is already surfaced as a toast by useTasks; keep the modal open
+      // so the user doesn't lose what was typed.
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
-      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
-        <h2 className="text-lg font-semibold text-slate-900">{modalTitle}</h2>
+    <Modal
+      title={mode === "create" ? "Nova tarefa" : "Editar tarefa"}
+      onClose={onClose}
+      isDismissDisabled={isSubmitting}
+      className="max-w-lg"
+    >
+      <form className="mt-4 space-y-4" onSubmit={handleSubmit} noValidate>
+        <Input
+          label="Título"
+          value={formData.title}
+          onChange={(event) => setFormData((currentData) => ({ ...currentData, title: event.target.value }))}
+          placeholder="Ex.: Criar tela inicial"
+          maxLength={100}
+          error={formErrors.title}
+          required
+        />
 
-        <form className="mt-4 space-y-4" onSubmit={handleSubmit}>
-          <Input
-            label="Título"
-            value={formData.title}
-            onChange={(event) => setFormData((currentData) => ({ ...currentData, title: event.target.value }))}
-            placeholder="Ex.: Criar tela inicial"
-            maxLength={100}
-            required
-          />
+        <Textarea
+          label="Descrição"
+          value={formData.description}
+          onChange={(event) => setFormData((currentData) => ({ ...currentData, description: event.target.value }))}
+          placeholder="Descreva brevemente a tarefa"
+          maxLength={500}
+          error={formErrors.description}
+          hint={`${formData.description.length}/500`}
+        />
 
-          <Textarea
-            label="Descrição"
-            value={formData.description}
-            onChange={(event) =>
-              setFormData((currentData) => ({ ...currentData, description: event.target.value }))
-            }
-            placeholder="Descreva brevemente a tarefa"
-            maxLength={500}
-          />
+        <Select
+          label="Prioridade"
+          value={formData.priority}
+          onChange={(event) =>
+            setFormData((currentData) => ({ ...currentData, priority: event.target.value as TaskPriority }))
+          }
+        >
+          {Object.entries(PRIORITY_LABELS).map(([priority, label]) => (
+            <option key={priority} value={priority}>
+              {label}
+            </option>
+          ))}
+        </Select>
 
-          <Select
-            label="Prioridade"
-            value={formData.priority}
-            onChange={(event) =>
-              setFormData((currentData) => ({ ...currentData, priority: event.target.value as TaskPriority }))
-            }
-          >
-            {Object.entries(PRIORITY_LABELS).map(([priority, label]) => (
-              <option key={priority} value={priority}>
-                {label}
-              </option>
-            ))}
-          </Select>
-
-          {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}
-
-          <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Salvando..." : mode === "create" ? "Criar tarefa" : "Salvar alterações"}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div className="flex justify-end gap-3 pt-2">
+          <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
+            Cancelar
+          </Button>
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "Salvando..." : mode === "create" ? "Criar tarefa" : "Salvar alterações"}
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 };

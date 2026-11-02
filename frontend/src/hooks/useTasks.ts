@@ -1,53 +1,67 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
-import axios from "axios";
 import { taskService } from "../services/taskService";
 import type { CreateTaskPayload, Task, TaskPriority, TaskStatus, UpdateTaskPayload } from "../types/task";
+import { getApiErrorMessage } from "../utils/apiError";
 import { matchesTaskFilters, sortTasksByPriorityAndDate } from "../utils/taskUtils";
-
-const genericErrorMessage = "Não foi possível concluir a ação. Tente novamente.";
-
-const getApiErrorMessage = (error: unknown): string => {
-  if (axios.isAxiosError(error)) {
-    const apiMessage = error.response?.data?.error?.message;
-
-    if (typeof apiMessage === "string" && apiMessage.length > 0) {
-      return apiMessage;
-    }
-  }
-
-  return genericErrorMessage;
-};
 
 export const useTasks = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedPriority, setSelectedPriority] = useState<TaskPriority | "ALL">("ALL");
 
-  const loadTasks = useCallback(async () => {
-    setIsLoading(true);
-    setErrorMessage(null);
-
-    try {
-      const loadedTasks = await taskService.getTasks();
-      setTasks(sortTasksByPriorityAndDate(loadedTasks));
-    } catch (error) {
-      setErrorMessage(getApiErrorMessage(error));
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  // Mirror of `tasks` so async callbacks can read the latest list (e.g. for rollback).
+  const tasksRef = useRef<Task[]>(tasks);
+  useEffect(() => {
+    tasksRef.current = tasks;
+  }, [tasks]);
 
   useEffect(() => {
-    void loadTasks();
-  }, [loadTasks]);
+    let isCancelled = false;
+
+    taskService
+      .getTasks()
+      .then((loadedTasks) => {
+        if (!isCancelled) {
+          setTasks(sortTasksByPriorityAndDate(loadedTasks));
+          setErrorMessage(null);
+        }
+      })
+      .catch((error: unknown) => {
+        if (!isCancelled) {
+          setErrorMessage(getApiErrorMessage(error));
+        }
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [reloadToken]);
+
+  const loadTasks = useCallback(() => {
+    setIsLoading(true);
+    setErrorMessage(null);
+    setReloadToken((currentToken) => currentToken + 1);
+  }, []);
 
   const filteredTasks = useMemo(
     () => tasks.filter((task) => matchesTaskFilters(task, searchTerm, selectedPriority)),
     [tasks, searchTerm, selectedPriority]
   );
+
+  const replaceTask = useCallback((updatedTask: Task) => {
+    setTasks((currentTasks) =>
+      sortTasksByPriorityAndDate(currentTasks.map((task) => (task.id === updatedTask.id ? updatedTask : task)))
+    );
+  }, []);
 
   const createTask = useCallback(async (payload: CreateTaskPayload) => {
     try {
@@ -60,30 +74,43 @@ export const useTasks = () => {
     }
   }, []);
 
-  const updateTask = useCallback(async (taskId: string, payload: UpdateTaskPayload) => {
-    try {
-      const updatedTask = await taskService.updateTask(taskId, payload);
-      setTasks((currentTasks) =>
-        sortTasksByPriorityAndDate(currentTasks.map((task) => (task.id === updatedTask.id ? updatedTask : task)))
-      );
-      toast.success("Tarefa atualizada com sucesso.");
-    } catch (error) {
-      toast.error(getApiErrorMessage(error));
-      throw error;
-    }
-  }, []);
+  const updateTask = useCallback(
+    async (taskId: string, payload: UpdateTaskPayload) => {
+      try {
+        const updatedTask = await taskService.updateTask(taskId, payload);
+        replaceTask(updatedTask);
+        toast.success("Tarefa atualizada com sucesso.");
+      } catch (error) {
+        toast.error(getApiErrorMessage(error));
+        throw error;
+      }
+    },
+    [replaceTask]
+  );
 
-  const updateTaskStatus = useCallback(async (taskId: string, status: TaskStatus) => {
-    try {
-      const updatedTask = await taskService.updateTaskStatus(taskId, status);
-      setTasks((currentTasks) =>
-        sortTasksByPriorityAndDate(currentTasks.map((task) => (task.id === updatedTask.id ? updatedTask : task)))
-      );
-    } catch (error) {
-      toast.error(getApiErrorMessage(error));
-      throw error;
-    }
-  }, []);
+  /**
+   * Optimistic update: the card moves immediately and is rolled back if the API fails,
+   * so drag and drop feels instant without hiding errors from the user.
+   */
+  const updateTaskStatus = useCallback(
+    async (taskId: string, status: TaskStatus) => {
+      const previousTask = tasksRef.current.find((task) => task.id === taskId);
+      if (!previousTask || previousTask.status === status) {
+        return;
+      }
+
+      replaceTask({ ...previousTask, status });
+
+      try {
+        const updatedTask = await taskService.updateTaskStatus(taskId, status);
+        replaceTask(updatedTask);
+      } catch (error) {
+        replaceTask(previousTask);
+        toast.error(getApiErrorMessage(error));
+      }
+    },
+    [replaceTask]
+  );
 
   const deleteTask = useCallback(async (taskId: string) => {
     try {

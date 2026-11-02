@@ -1,8 +1,6 @@
 import { useDroppable } from "@dnd-kit/core";
-import {
-  SortableContext,
-  verticalListSortingStrategy
-} from "@dnd-kit/sortable";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import clsx from "clsx";
 import type { Task, TaskStatus } from "../../types/task";
 import { STATUS_LABELS } from "../../constants/task";
 import { EmptyState } from "../ui/EmptyState";
@@ -17,21 +15,32 @@ interface KanbanColumnProps {
 
 export const KanbanColumn = ({ status, tasks, onEditTask, onDeleteTask }: KanbanColumnProps) => {
   const { setNodeRef, isOver } = useDroppable({ id: status });
+  const headingId = `column-${status}`;
 
   return (
     <section
       ref={setNodeRef}
-      className={`rounded-2xl border p-4 transition ${
-        isOver ? "border-slate-400 bg-slate-100" : "border-slate-200 bg-slate-50"
-      }`}
+      aria-labelledby={headingId}
+      data-testid={`column-${status}`}
+      className={clsx(
+        "flex min-h-48 flex-col rounded-2xl border p-4 transition",
+        isOver ? "border-slate-400 bg-slate-200/70" : "border-slate-200 bg-slate-50"
+      )}
     >
       <header className="mb-4 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-slate-800">{STATUS_LABELS[status]}</h2>
-        <span className="rounded-full bg-slate-200 px-2 py-1 text-xs font-semibold text-slate-700">{tasks.length}</span>
+        <h2 id={headingId} className="text-sm font-semibold text-slate-800">
+          {STATUS_LABELS[status]}
+        </h2>
+        <span
+          className="rounded-full bg-slate-200 px-2 py-1 text-xs font-semibold text-slate-700"
+          aria-label={`${tasks.length} tarefa(s)`}
+        >
+          {tasks.length}
+        </span>
       </header>
 
       <SortableContext items={tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
-        <div className="space-y-3">
+        <div className="flex-1 space-y-3">
           {tasks.length === 0 ? (
             <EmptyState title="Sem tarefas" description="Arraste uma tarefa para esta coluna ou crie uma nova." />
           ) : (
