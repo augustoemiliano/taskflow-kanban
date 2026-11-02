@@ -1,129 +1,180 @@
 # TaskFlow Kanban
 
-Sistema web de Kanban para organizar tarefas por status e prioridade, com **front-end** e **back-end** separados, arquitetura em camadas e foco em segurança e legibilidade.
+[![CI](https://github.com/augustoemiliano/taskflow-kanban/actions/workflows/ci.yml/badge.svg)](https://github.com/augustoemiliano/taskflow-kanban/actions/workflows/ci.yml)
 
-## Objetivo
+Quadro Kanban full stack para organizar tarefas por **status** e **prioridade**, com arrastar e soltar, busca e filtros. Front-end (SPA em React) e back-end (API REST em Express) separados, arquitetura em camadas, persistência em **SQLite** e testes automatizados nos dois lados.
 
-Demonstrar um fluxo completo de aplicação moderna (SPA + API REST) com validação de entrada, tratamento global de erros, UX profissional e código preparado para evoluir para persistência em banco relacional.
+> **Objetivo:** demonstrar um fluxo completo de aplicação moderna (SPA + API REST) com validação de entrada, tratamento global de erros, UX profissional e código preparado para evoluir de persistência — o repositório é uma interface, com implementação em memória (testes) e SQLite (padrão).
+
+## Screenshots
+
+<!-- Adicione as imagens em docs/ e descomente as linhas abaixo. -->
+<!-- ![Quadro Kanban](docs/screenshot-board.png) -->
+<!-- ![Criando uma tarefa](docs/screenshot-modal.png) -->
+<!-- ![Arrastar e soltar](docs/demo.gif) -->
+
+_Em breve: capturas de tela e um GIF curto do fluxo (criar, arrastar entre colunas, filtrar e excluir)._
 
 ## Funcionalidades
 
-- Criar, listar, buscar por ID, editar e excluir tarefas
-- Alterar status via **drag and drop**
-- Prioridades e filtros
-- Busca por título/descrição
-- Contadores por coluna
-- Estados de carregamento, erro e vazio
-- Confirmação antes de excluir
-- Feedback com toasts
+- CRUD completo de tarefas (título, descrição, prioridade, status)
+- Quadro com 4 colunas: **A Fazer → Em Andamento → Em Revisão → Concluído**
+- **Arrastar e soltar** entre colunas com mouse **e teclado** (espaço + setas), com atualização otimista e rollback automático se a API falhar
+- Prioridades (Baixa, Média, Alta, Urgente) com ordenação automática
+- Busca por título/descrição e filtro por prioridade
+- Contadores por status
+- Estados de carregamento (skeleton), erro (com "Tentar novamente") e vazio (com atalho para criar)
+- Validação no formulário (com erros por campo) **e** na API (Zod)
+- Confirmação antes de excluir e feedback com toasts
+- Modais acessíveis (`role="dialog"`, fecham com Esc, foco gerenciado)
+- Dados persistidos em SQLite (sobrevivem a reinícios da API)
 
-## Tecnologias
+## Stack
 
-### Front-end
-
-- React + TypeScript + Vite
-- Tailwind CSS (via `@tailwindcss/vite`)
-- React Router
-- Axios
-- `@dnd-kit/*`
-- `lucide-react`
-- `react-hot-toast`
-- `clsx`
-
-### Back-end
-
-- Node.js + TypeScript
-- Express
-- Zod
-- CORS controlado por variável de ambiente
-- `dotenv`
-- `uuid`
+| Camada | Tecnologias |
+| --- | --- |
+| Front-end | React 19, TypeScript, Vite, Tailwind CSS 4, dnd-kit, Axios, React Router, react-hot-toast, lucide-react |
+| Back-end | Node.js, Express 5, TypeScript, Zod, SQLite (`node:sqlite`, nativo do Node), dotenv, CORS |
+| Testes | Vitest, Supertest, Testing Library (React + user-event), jsdom |
+| Qualidade | ESLint (typescript-eslint, react-hooks), TypeScript `strict`, GitHub Actions |
+| Infra | Docker (multi-stage), nginx, docker-compose |
 
 ## Arquitetura
 
-### Por que separar front e back?
-
-- **Escalabilidade e deploy independente**: cada camada pode evoluir e ser publicada separadamente.
-- **Contrato explícito**: a API REST documenta o comportamento do sistema e facilita testes.
-- **Segurança**: validação e regras de negócio ficam no servidor; o cliente não é fonte de verdade.
-
-### Como o front conversa com o back
-
-O front usa `Axios` com `baseURL` vinda de `VITE_API_URL` (ex.: `http://localhost:3333/api`) e consome os endpoints abaixo.
-
-O back valida todas as entradas com **Zod**, aplica regras em `service` e persiste via `repository` (in-memory neste momento).
-
-## Estrutura de pastas
-
 ```
-taskflow-kanban/
-├── backend/
-├── frontend/
-├── README.md
-└── .gitignore
+┌──────────────────────────┐   HTTP/JSON   ┌────────────────────────────────────────────────┐
+│  SPA (React + Vite)      │ ───────────▶  │  API REST (Express)                            │
+│                          │               │                                                │
+│  pages/DashboardPage     │               │  routes ─▶ validateRequest (Zod)               │
+│  hooks/useTasks  ────────┤               │         ─▶ controller ─▶ service (regras)      │
+│  services/taskService    │               │         ─▶ TaskRepository (interface)          │
+│  (Axios)                 │               │              ├─ SqliteTaskRepository (padrão)  │
+└──────────────────────────┘               │              └─ InMemoryTaskRepository (testes)│
+                                           │  errorHandler global ─▶ resposta padronizada   │
+                                           └────────────────────────────────────────────────┘
 ```
 
-## Como rodar localmente
+**Back-end (camadas)**
+
+- `routes/` — define os endpoints e aplica o middleware de validação.
+- `schemas/` — schemas Zod (título 3–100 caracteres, descrição até 500, enums de status/prioridade, UUID). Campos desconhecidos são descartados.
+- `controllers/` — traduzem HTTP ⇄ serviço; não contêm regra de negócio.
+- `services/` — regras de negócio (ex.: toda tarefa nasce em `TODO`, `404` quando não existe).
+- `repositories/` — interface `TaskRepository` com duas implementações. A escolha é feita por `DATABASE_DRIVER`, sem alterar nenhuma outra camada.
+- `errors/` — `AppError` + `errorHandler` global: validação → `400`, JSON malformado → `400`, não encontrado → `404`, inesperado → `500` (logado no servidor, sem vazar detalhes).
+- `app.ts` expõe `createApp({ taskRepository, allowedOrigins })`, o que permite testar a API inteira com o repositório em memória.
+
+**Persistência:** o SQLite usa o módulo nativo `node:sqlite` (sem dependência nativa para compilar). O schema tem `CHECK` constraints para status e prioridade, e as migrations são versionadas via `PRAGMA user_version` (basta adicionar uma nova entrada à lista em `sqliteTaskRepository.ts`). Para migrar para PostgreSQL, basta criar outra implementação de `TaskRepository`.
+
+**Front-end:** o hook `useTasks` concentra estado, chamadas à API, filtros e atualização otimista; os componentes de UI são burros e reutilizáveis (`components/ui`). As regras de validação do formulário espelham as da API para feedback imediato — a API continua sendo a fonte da verdade.
+
+## Como rodar
 
 ### Pré-requisitos
 
-- Node.js 20+ (recomendado)
+- **Node.js 22.13+** (necessário para o `node:sqlite`; recomendado Node 24)
+- npm 10+
 
-### Back-end
+### Opção 1 — tudo de uma vez (recomendado)
 
 ```bash
+git clone https://github.com/augustoemiliano/taskflow-kanban.git
+cd taskflow-kanban
+npm install      # cria backend/.env e frontend/.env a partir dos exemplos e instala back + front
+npm run dev      # API em http://localhost:3333 e app em http://localhost:5173
+```
+
+Os dados ficam em `backend/data/taskflow.db` (ignorado pelo Git).
+
+### Opção 2 — cada parte separadamente
+
+```bash
+# API
 cd backend
 cp .env.example .env
 npm install
-npm run dev
-```
+npm run dev          # http://localhost:3333
 
-Servidor padrão: `http://localhost:3333`
-
-O servidor faz bind em `0.0.0.0` para facilitar acesso via `localhost` (IPv4/IPv6 dependendo do SO).
-
-### Front-end
-
-```bash
+# Front-end (em outro terminal)
 cd frontend
 cp .env.example .env
 npm install
-npm run dev
+npm run dev          # http://localhost:5173
 ```
 
-App padrão: `http://localhost:5173`
+### Opção 3 — Docker
+
+```bash
+docker compose up --build
+```
+
+App em **http://localhost:8080** (o nginx serve a SPA e faz proxy de `/api` para a API). O banco SQLite fica no volume `taskflow-data`.
+
+### Scripts da raiz
+
+| Comando | O que faz |
+| --- | --- |
+| `npm install` | Cria os `.env` e instala as dependências de back e front |
+| `npm run dev` | Sobe API + front em modo desenvolvimento |
+| `npm run lint` | ESLint nos dois projetos |
+| `npm run typecheck` | Checagem de tipos nos dois projetos |
+| `npm test` | Testes do back e do front |
+| `npm run build` | Build de produção dos dois |
+| `npm start` | Roda os builds (API + `vite preview` em http://localhost:4173) |
+| `npm run check` | lint + typecheck + testes + build (o mesmo que a CI) |
+
+## Testes
+
+```bash
+npm test                    # tudo
+npm test --prefix backend   # 31 testes: API (Supertest) + contrato dos repositórios
+npm test --prefix frontend  # 33 testes: utilitários, hook useTasks e fluxos da tela
+```
+
+- **API:** CRUD completo, validação (campos obrigatórios, limites, enums, UUID), `404`, JSON malformado, CORS e rotas inexistentes.
+- **Repositórios:** a mesma suíte de contrato roda contra a implementação em memória e a SQLite, além de testes de persistência em arquivo e das `CHECK` constraints.
+- **Front:** filtros/ordenação, resolução do alvo do drop, validação do formulário, mensagens de erro, atualização otimista com rollback e fluxos de criar/editar/excluir/filtrar renderizando a página.
 
 ## Variáveis de ambiente
 
-### `backend/.env.example`
+### `backend/.env`
 
-- `PORT`: porta HTTP do servidor
-- `NODE_ENV`: ambiente de execução
-- `FRONTEND_URL`: origem permitida no CORS
+| Variável | Padrão | Descrição |
+| --- | --- | --- |
+| `PORT` | `3333` | Porta HTTP |
+| `NODE_ENV` | `development` | `development`, `test` ou `production` |
+| `FRONTEND_URL` | `http://localhost:5173` (fora de produção) | Origens liberadas no CORS, separadas por vírgula. **Obrigatória em produção.** |
+| `DATABASE_DRIVER` | `sqlite` (`memory` quando `NODE_ENV=test`) | `sqlite` (persistente) ou `memory` (volátil) |
+| `DATABASE_PATH` | `data/taskflow.db` | Caminho do arquivo SQLite (ou `:memory:`) |
 
-### `frontend/.env.example`
+### `frontend/.env`
 
-- `VITE_API_URL`: URL base da API (inclui `/api`)
+| Variável | Padrão | Descrição |
+| --- | --- | --- |
+| `VITE_API_URL` | `http://localhost:3333/api` em dev, `/api` no build | URL base da API (inclui `/api`) |
 
 ## Endpoints da API
 
-Base: `/api`
+Base: `http://localhost:3333/api`
 
-| Método | Rota | Descrição |
-| --- | --- | --- |
-| GET | `/tasks` | Lista tarefas |
-| GET | `/tasks/:id` | Busca por ID |
-| POST | `/tasks` | Cria tarefa |
-| PATCH | `/tasks/:id` | Atualiza campos |
-| PATCH | `/tasks/:id/status` | Atualiza apenas status |
-| DELETE | `/tasks/:id` | Remove tarefa |
+| Método | Rota | Descrição | Sucesso |
+| --- | --- | --- | --- |
+| GET | `/health` | Health check | `200` |
+| GET | `/tasks` | Lista tarefas (mais recentes primeiro) | `200` |
+| GET | `/tasks/:id` | Busca por ID | `200` |
+| POST | `/tasks` | Cria tarefa (`title`, `priority`, `description?`) — status inicial `TODO` | `201` |
+| PATCH | `/tasks/:id` | Atualiza parcialmente (`title?`, `description?`, `priority?`, `status?`) | `200` |
+| PATCH | `/tasks/:id/status` | Atualiza apenas o status (usado no arrastar e soltar) | `200` |
+| DELETE | `/tasks/:id` | Remove tarefa | `200` |
 
-### Padrão de resposta
+Valores aceitos — `status`: `TODO`, `IN_PROGRESS`, `REVIEW`, `DONE` · `priority`: `LOW`, `MEDIUM`, `HIGH`, `URGENT`.
+
+### Formato das respostas
 
 Sucesso:
 
 ```json
-{ "success": true, "data": {} }
+{ "success": true, "data": { "id": "…", "title": "Criar layout", "status": "TODO", "priority": "HIGH", "description": "", "createdAt": "…", "updatedAt": "…" } }
 ```
 
 Erro:
@@ -134,12 +185,14 @@ Erro:
   "error": {
     "code": "VALIDATION_ERROR",
     "message": "Existem campos inválidos na requisição.",
-    "details": []
+    "details": [{ "field": "title", "message": "O título deve ter no mínimo 3 caracteres." }]
   }
 }
 ```
 
-## Testes rápidos (curl)
+Códigos de erro: `VALIDATION_ERROR` (400), `INVALID_JSON` (400), `TASK_NOT_FOUND` (404), `RESOURCE_NOT_FOUND` (404), `PAYLOAD_TOO_LARGE` (413), `INTERNAL_SERVER_ERROR` (500).
+
+### Exemplos (curl)
 
 ```bash
 curl -X POST http://localhost:3333/api/tasks \
@@ -147,20 +200,56 @@ curl -X POST http://localhost:3333/api/tasks \
   -d '{"title":"Criar layout","description":"Kanban","priority":"HIGH"}'
 
 curl http://localhost:3333/api/tasks
+
+curl -X PATCH http://localhost:3333/api/tasks/<id>/status \
+  -H "Content-Type: application/json" \
+  -d '{"status":"DONE"}'
 ```
 
-## Prints / GIFs
+## Estrutura de pastas
 
-> Adicione aqui capturas de tela ou um GIF curto do fluxo (criar tarefa, arrastar entre colunas, filtrar e excluir).
+```
+taskflow-kanban/
+├── .github/workflows/ci.yml   # lint + typecheck + testes + build (Node 22 e 24)
+├── backend/
+│   ├── src/
+│   │   ├── config/            # env (validado com Zod) e CORS
+│   │   ├── controllers/
+│   │   ├── dtos/
+│   │   ├── errors/            # AppError + errorHandler global
+│   │   ├── middlewares/       # validateRequest, notFound
+│   │   ├── models/
+│   │   ├── repositories/      # interface + memória + SQLite
+│   │   ├── routes/
+│   │   ├── schemas/           # Zod
+│   │   ├── services/
+│   │   ├── app.ts             # createApp() (injeção de dependências)
+│   │   └── server.ts
+│   ├── tests/
+│   └── Dockerfile
+├── frontend/
+│   ├── src/
+│   │   ├── components/        # kanban/ e ui/
+│   │   ├── hooks/useTasks.ts
+│   │   ├── pages/
+│   │   ├── services/          # Axios
+│   │   └── utils/
+│   ├── nginx.conf
+│   └── Dockerfile
+├── scripts/setup.mjs
+├── docker-compose.yml
+└── package.json               # scripts que orquestram back + front
+```
 
-## Melhorias futuras
+## Próximos passos
 
-- Persistência em **PostgreSQL** com migrations
-- Autenticação (JWT) e multiusuário
-- Auditoria de mudanças (histórico)
-- Testes automatizados (Vitest/Jest + Supertest)
-- CI com lint, typecheck e build
+- Ordenação manual dos cartões dentro da coluna (campo `position`)
+- Autenticação (JWT) e quadros por usuário
+- Múltiplos quadros e colunas personalizáveis
+- PostgreSQL como nova implementação de `TaskRepository`
+- Testes end-to-end (Playwright) na CI
+- Documentação OpenAPI/Swagger
 
-## Status
+## Licença
 
-**MVP funcional** com arquitetura profissional e caminho claro de evolução.
+[MIT](LICENSE)
