@@ -12,12 +12,11 @@ Quadro Kanban full stack para organizar tarefas por **status** e **prioridade**,
 
 ## Screenshots
 
-<!-- Adicione as imagens em docs/ e descomente as linhas abaixo. -->
-<!-- ![Quadro Kanban](docs/screenshot-board.png) -->
-<!-- ![Criando uma tarefa](docs/screenshot-modal.png) -->
-<!-- ![Arrastar e soltar](docs/demo.gif) -->
+![Quadro Kanban com tarefas em quatro colunas](docs/screenshot-board.png)
 
-_Em breve: capturas de tela e um GIF curto do fluxo (criar, arrastar entre colunas, filtrar e excluir)._
+| Criando uma tarefa | No celular |
+|---|---|
+| ![Modal de nova tarefa](docs/screenshot-modal.png) | <img src="docs/screenshot-mobile.png" alt="Quadro no celular" width="260"> |
 
 ## Funcionalidades
 
