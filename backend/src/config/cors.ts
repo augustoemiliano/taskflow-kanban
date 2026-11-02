@@ -1,8 +1,7 @@
 import type { CorsOptions } from "cors";
-import { env } from "./env";
 
-export const corsOptions: CorsOptions = {
-  origin: env.FRONTEND_URL,
+export const createCorsOptions = (allowedOrigins: string[]): CorsOptions => ({
+  origin: allowedOrigins,
   methods: ["GET", "POST", "PATCH", "DELETE"],
   credentials: false
-};
+});
