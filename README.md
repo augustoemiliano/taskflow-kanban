@@ -2,6 +2,10 @@
 
 [![CI](https://github.com/augustoemiliano/taskflow-kanban/actions/workflows/ci.yml/badge.svg)](https://github.com/augustoemiliano/taskflow-kanban/actions/workflows/ci.yml)
 
+🔗 Demo online: https://augustoemiliano.github.io/taskflow-kanban/
+
+> A demo roda em modo local no navegador: não há back-end, e as tarefas ficam salvas no `localStorage` do seu navegador (é possível restaurar os dados de exemplo a qualquer momento).
+
 Quadro Kanban full stack para organizar tarefas por **status** e **prioridade**, com arrastar e soltar, busca e filtros. Front-end (SPA em React) e back-end (API REST em Express) separados, arquitetura em camadas, persistência em **SQLite** e testes automatizados nos dois lados.
 
 > **Objetivo:** demonstrar um fluxo completo de aplicação moderna (SPA + API REST) com validação de entrada, tratamento global de erros, UX profissional e código preparado para evoluir de persistência — o repositório é uma interface, com implementação em memória (testes) e SQLite (padrão).
